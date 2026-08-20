@@ -1,0 +1,19 @@
+# Pipeline configuration. Paths relative to the repo root.
+
+data:
+  processed_dir: data/processed
+  artifacts_dir: data/artifacts
+  n_products: 40
+  n_weeks: 104
+  seed: 42
+
+optimization:
+  max_price_change: 0.25     # never move more than +-25% from current price
+  min_margin: 0.05           # price must stay above cost * (1 + min_margin)
+
+simulator:
+  n_bootstrap: 400
+  weeks: 12
+
+eval:
+  experiment_name: priceoptic
