@@ -37,7 +37,7 @@ def estimate_product(sales: pd.DataFrame) -> dict:
         return {"elasticity": None, "se": None, "note": "insufficient price variation"}
     x = _design(df["price"].to_numpy(), df["week"].to_numpy())
     y = np.log(df["units"].to_numpy())
-    beta, residuals, rank, _ = np.linalg.lstsq(x, y, rcond=None)
+    beta, residuals, _, _ = np.linalg.lstsq(x, y, rcond=None)
     dof = max(len(y) - x.shape[1], 1)
     sigma2 = (
         float(residuals[0]) / dof if len(residuals) else float(((y - x @ beta) ** 2).sum()) / dof
