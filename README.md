@@ -17,8 +17,6 @@
 
 </div>
 
-> **Portfolio project.** Built to demonstrate econometric modelling and a total-functional domain design on realistic (synthetic) sales data. Not hardened for production use.
-
 ---
 
 ## The problem
