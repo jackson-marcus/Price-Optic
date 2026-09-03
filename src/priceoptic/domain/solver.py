@@ -48,10 +48,7 @@ def solve_optimal_price_total(ctx: PricingContext) -> PriceRecommendation:
     current_profit = compute_profit(p_curr, c, e, ref_price)
     best_profit = float(profits[best_idx])
 
-    if current_profit > 0:
-        lift = (best_profit - current_profit) / current_profit
-    else:
-        lift = 0.0
+    lift = (best_profit - current_profit) / current_profit if current_profit > 0 else 0.0
 
     binding = "none"
     if best_idx == 0:

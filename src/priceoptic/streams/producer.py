@@ -1,41 +1,75 @@
-"""Publish PriceTick records onto an in-memory Redis Stream."""
+"""Append-only ledger of weekly sales observations.
+
+Every observation gets a monotonically increasing offset, so a reader can
+resume from wherever it stopped. The ledger never validates economics or
+deduplicates - that is the consumer's job - it only refuses payloads that do
+not parse, and keeps those as rejects so a caller can see what was dropped.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any
 
-from priceoptic.streams.schemas import STREAM_NAME, StreamEvent
+import pandas as pd
+
+from priceoptic.streams.schemas import (
+    LEDGER_NAME,
+    ObservationError,
+    SalesObservation,
+    parse_observation,
+)
 
 
-class InMemoryStream:
-    """Minimal XADD/XREAD stand-in used by tests and local workers."""
-
-    def __init__(self) -> None:
-        self.entries: list[StreamEvent] = []
-
-    def xadd(self, event: StreamEvent) -> str:
-        self.entries.append(event)
-        return event.event_id
-
-    def xread(self, last_id: str | None = None) -> list[StreamEvent]:
-        if last_id is None:
-            return list(self.entries)
-        seen = False
-        pending: list[StreamEvent] = []
-        for event in self.entries:
-            if seen:
-                pending.append(event)
-            elif event.event_id == last_id:
-                seen = True
-        return pending
+@dataclass(frozen=True, slots=True)
+class Reject:
+    payload: dict[str, Any]
+    reason: str
 
 
-class StreamProducer:
-    def __init__(self, stream: InMemoryStream, stream_name: str = STREAM_NAME) -> None:
-        self.stream = stream
-        self.stream_name = stream_name
+class SalesLedger:
+    def __init__(self, name: str = LEDGER_NAME) -> None:
+        self.name = name
+        self._entries: list[SalesObservation] = []
 
-    def publish(self, payload: dict[str, Any], **headers: str) -> StreamEvent:
-        event = StreamEvent.create(payload, **headers)
-        self.stream.xadd(event)
-        return event
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def append(self, obs: SalesObservation) -> int:
+        self._entries.append(obs)
+        return len(self._entries) - 1
+
+    def read_from(self, offset: int) -> list[tuple[int, SalesObservation]]:
+        """Entries with offset >= ``offset`` in arrival order."""
+        return list(enumerate(self._entries))[offset:]
+
+    def publish(self, payloads: Iterable[dict[str, Any]]) -> tuple[list[int], list[Reject]]:
+        """Parse and append a batch. Malformed payloads are returned, not raised,
+        so one bad row does not block the rest of the batch."""
+        offsets: list[int] = []
+        rejects: list[Reject] = []
+        for payload in payloads:
+            try:
+                obs = parse_observation(payload)
+            except ObservationError as exc:
+                rejects.append(Reject(payload=dict(payload), reason=str(exc)))
+                continue
+            offsets.append(self.append(obs))
+        return offsets, rejects
+
+    def publish_history(self, sales: pd.DataFrame) -> int:
+        """Replay a ``sales.parquet`` frame week by week, in week order across
+        products - the order a real feed would deliver it. Returns rows added."""
+        ordered = sales.sort_values(["week", "product_id"], kind="stable")
+        before = len(self)
+        for row in ordered.itertuples(index=False):
+            self.append(
+                SalesObservation(
+                    product_id=int(row.product_id),
+                    week=int(row.week),
+                    price=float(row.price),
+                    units=int(row.units),
+                )
+            )
+        return len(self) - before

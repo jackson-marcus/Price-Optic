@@ -1,1 +1,1 @@
-"""Downstream workers that fold PriceTick events into features."""
+"""Workers that keep per-product elasticity estimates current as sales arrive."""

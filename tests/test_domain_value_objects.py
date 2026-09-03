@@ -1,5 +1,7 @@
 """Unit tests for Immutable Value Objects and Total Functions in PriceOptic."""
 
+import dataclasses
+
 import pytest
 
 from priceoptic.domain.solver import solve_optimal_price_total
@@ -22,7 +24,7 @@ def test_money_immutability_and_arithmetic():
     m4 = m1 * 2.0
     assert m4.amount == 21.0
 
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         m1.amount = 99.0  # Frozen dataclass should reject direct mutation
 
 
